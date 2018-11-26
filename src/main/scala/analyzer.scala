@@ -16,6 +16,7 @@ object analyzer {
 
     val logs = logsReader("access.log",spark)
     logs.show(5)
+    spark.stop()
 
   }
 
@@ -26,17 +27,33 @@ object analyzer {
       .withColumn("Ip", split(col("value")," - - ").getItem(0))
       .withColumn("others", split(col("value")," - - ").getItem(1))
       .withColumn("time", split(col("others"),"\"").getItem(0))
-      .withColumn("request", split(col("others"),"\"").getItem(1))
+      .withColumn("request", split(col("others"),"]").getItem(1))
       .drop("value")
       .drop("others")
 
     val formatDate = udf((date : String) => date.substring(1,date.length-1))
     logs = logs.withColumn("time", formatDate(logs("time")) )
 
-    val formatRequest = udf((request : String) => request.substring(0,request.length-1))
+    val formatRequest = udf((request : String) => request.substring(2,request.length-5))
     logs = logs.withColumn("request", formatRequest(logs("request")) )
 
+    val line = logs.rdd.take(1)
+
+
+    logs = logs
+      .withColumn("request method",split(col("request")," ").getItem(0))
+      .withColumn("request path",split(col("request")," ").getItem(1))
+      .withColumn("request protocol",split(col("request")," ").getItem(2))
+      .withColumn("request protocol",substring(col("request protocol"),0,8))
+      .withColumn("request status",split(col("request")," ").getItem(3))
+      .withColumn("request content",split(col("request")," ").getItem(4))
+      .withColumn("request user agent",split(col("request")," ").getItem(5))
+
+
+
     return logs
+
+
 
   }
 
