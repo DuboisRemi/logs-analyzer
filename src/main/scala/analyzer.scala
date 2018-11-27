@@ -16,13 +16,19 @@ object analyzer {
 
     val logs = logsReader("access.log",spark)
     logs.show(5)
+
+    logs.groupBy("request method").count().show()
+    logs.groupBy("request status").count().show()
     spark.stop()
 
   }
 
+  /* Read a log fil in resources
+   * load it and retrun it into a dataframe  */
   def logsReader(path:String,spark: SparkSession ) : DataFrame = {
 
     var logs = spark.read.option("delimiter"," - - ").text("src/main/resources/"+path)
+    logs.cache()
     logs = logs
       .withColumn("Ip", split(col("value")," - - ").getItem(0))
       .withColumn("others", split(col("value")," - - ").getItem(1))
@@ -47,14 +53,15 @@ object analyzer {
       .withColumn("request protocol",substring(col("request protocol"),0,8))
       .withColumn("request status",split(col("request")," ").getItem(3))
       .withColumn("request content",split(col("request")," ").getItem(4))
-      .withColumn("request user agent",split(col("request")," ").getItem(5))
+      .withColumn("referrer path",split(col("request")," ").getItem(5))
 
+    logs = logs.filter(logs("request status") =!= "null")
 
+    logs = logs.filter(logs("request method") =!= "T")
+    logs = logs.withColumn("request method",when(col("request method")=== "Head", "HEAD")
+              .otherwise(col("request method")))
 
     return logs
-
-
-
   }
 
 

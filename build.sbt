@@ -6,7 +6,7 @@ scalaVersion := "2.11.12"
 
 
 //extra dependencies
-val sparkVersion = "2.2.1"
+val sparkVersion = "2.2.0"
 
 //refer at https://mvnrepository.com
 libraryDependencies ++= Seq{
