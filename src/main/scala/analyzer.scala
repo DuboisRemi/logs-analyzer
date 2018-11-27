@@ -23,11 +23,13 @@ object analyzer {
     logs.groupBy("request status").count().show()
     logs.groupBy("time zone").count().show()
     countTimeAttendance(logs).show()
+    countServerErrorsPerHour(logs).show()
     val t1 = System.currentTimeMillis()
     println("Elapsed time: " + (t1 - t0) + "ms")
     scala.io.StdIn.readLine("enter e to exit : \n")
     spark.stop()
   }
+
   /* Read a log fil in resources
    * load it and retrun it into a dataframe  */
   def logsReader(path:String,spark: SparkSession ) : DataFrame = {
@@ -82,6 +84,7 @@ object analyzer {
     logs
   }
 
+  //Add a column with the type of the request status
   def getTypeRequestStatus(inputLogs : DataFrame) : DataFrame = {
     val typeRequest = udf((status : String)=>
       if (status.startsWith("2")) "Sucess"
@@ -92,8 +95,18 @@ object analyzer {
     inputLogs.withColumn("type request status",typeRequest(col("request status")))
     }
 
+  //Count number of request by hour
   def countTimeAttendance(inputLogs : DataFrame) : DataFrame = {
     var logs = inputLogs.withColumn("hour",split(col("time"), ":").getItem(0))
     logs.groupBy("hour").count().orderBy(desc("count"))
+  }
+
+  //Count the number of server errors per hour
+  def countServerErrorsPerHour(inputLogs :DataFrame) : DataFrame = {
+    var errorsPerHour = inputLogs
+      .filter(inputLogs("type request status") === "Server error")
+      .withColumn("hour",split(col("time"), ":").getItem(0))
+      .groupBy("hour").count().orderBy(desc("count"))
+    errorsPerHour
   }
 }
