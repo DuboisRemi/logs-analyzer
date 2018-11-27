@@ -20,12 +20,14 @@ object analyzer {
     logs.cache()
     logs.show(5)
     logs.groupBy("request method").count().show()
+    logs.groupBy("type request status").count().show()
     logs.groupBy("request status").count().show()
     logs.groupBy("time zone").count().show()
-    spark.stop()
 
     val t1 = System.currentTimeMillis()
     println("Elapsed time: " + (t1 - t0) + "ms")
+    scala.io.StdIn.readLine("enter e to exit : \n")
+    spark.stop()
   }
   /* Read a log fil in resources
    * load it and retrun it into a dataframe  */
@@ -42,6 +44,7 @@ object analyzer {
 
     logs = logsFormatTime(logs)
     logs = logsFormatRequest(logs)
+    logs = getTypeRequestStatus(logs)
     logs
   }
 
@@ -80,4 +83,14 @@ object analyzer {
               .otherwise(col("request method")))
     logs
   }
+
+  def getTypeRequestStatus(inputLogs : DataFrame) : DataFrame = {
+    val typeRequest = udf((status : String)=>
+      if (status.startsWith("2")) "Sucess"
+      else if (status.startsWith("3")) "Redirection"
+      else if (status.startsWith("4")) "Client error"
+      else if (status.startsWith("5")) "Server error"
+      else "Unknown Status")
+    inputLogs.withColumn("type request status",typeRequest(col("request status")))
+    }
 }
