@@ -8,43 +8,61 @@ import org.apache.spark.sql.types._
 object analyzer {
 
   def main(args : Array[String]): Unit ={
+    val t0 = System.currentTimeMillis()
+
     Logger.getLogger("org").setLevel(Level.ERROR)
     val spark = org.apache.spark.sql.SparkSession.builder
       .master("local[*]")
       .appName("Spark Log Analyzer")
-      .getOrCreate;
+      .getOrCreate
 
     val logs = logsReader("access.log",spark)
+    logs.cache()
     logs.show(5)
-
     logs.groupBy("request method").count().show()
     logs.groupBy("request status").count().show()
+    logs.groupBy("time zone").count().show()
     spark.stop()
 
+    val t1 = System.currentTimeMillis()
+    println("Elapsed time: " + (t1 - t0) + "ms")
   }
-
   /* Read a log fil in resources
    * load it and retrun it into a dataframe  */
   def logsReader(path:String,spark: SparkSession ) : DataFrame = {
 
-    var logs = spark.read.option("delimiter"," - - ").text("src/main/resources/"+path)
-    logs.cache()
+    var logs = spark.read.option("delimiter", " - - ").text("src/main/resources/" + path)
     logs = logs
-      .withColumn("Ip", split(col("value")," - - ").getItem(0))
-      .withColumn("others", split(col("value")," - - ").getItem(1))
-      .withColumn("time", split(col("others"),"\"").getItem(0))
-      .withColumn("request", split(col("others"),"]").getItem(1))
+      .withColumn("Ip", split(col("value"), " - - ").getItem(0))
+      .withColumn("others", split(col("value"), " - - ").getItem(1))
+      .withColumn("time", split(col("others"), "\"").getItem(0))
+      .withColumn("request", split(col("others"), "]").getItem(1))
       .drop("value")
       .drop("others")
 
-    val formatDate = udf((date : String) => date.substring(1,date.length-1))
-    logs = logs.withColumn("time", formatDate(logs("time")) )
+    logs = logsFormatTime(logs)
+    logs = logsFormatRequest(logs)
+    logs
+  }
 
+  /*Split time into Date and Hour */
+  def logsFormatTime(inputLogs : DataFrame) : DataFrame = {
+
+    val formatDate = udf((date: String) => date.substring(1, date.length - 1))
+    val getHour = udf((time: String) => time.substring(12, time.length() - 1))
+    var logs = inputLogs.withColumn("time", formatDate(inputLogs("time")))
+    logs = logs
+      .withColumn("date", split(col("time"), ":").getItem(0))
+      .withColumn("hour", getHour(logs("time")))
+      .withColumn("time zone", split(col("hour")," ").getItem(1))
+      .drop("time")
+    logs
+  }
+
+  //Split Request into multiple value
+  def logsFormatRequest(inputLogs : DataFrame) : DataFrame = {
     val formatRequest = udf((request : String) => request.substring(2,request.length-5))
-    logs = logs.withColumn("request", formatRequest(logs("request")) )
-
-    val line = logs.rdd.take(1)
-
+    var logs = inputLogs.withColumn("request", formatRequest(inputLogs("request")) )
 
     logs = logs
       .withColumn("request method",split(col("request")," ").getItem(0))
@@ -60,9 +78,6 @@ object analyzer {
     logs = logs.filter(logs("request method") =!= "T")
     logs = logs.withColumn("request method",when(col("request method")=== "Head", "HEAD")
               .otherwise(col("request method")))
-
-    return logs
+    logs
   }
-
-
 }
