@@ -17,13 +17,12 @@ object analyzer {
       .getOrCreate
 
     val logs = logsReader("access.log",spark)
-    logs.cache()
     logs.show(5)
     logs.groupBy("request method").count().show()
     logs.groupBy("type request status").count().show()
     logs.groupBy("request status").count().show()
     logs.groupBy("time zone").count().show()
-
+    countTimeAttendance(logs).show()
     val t1 = System.currentTimeMillis()
     println("Elapsed time: " + (t1 - t0) + "ms")
     scala.io.StdIn.readLine("enter e to exit : \n")
@@ -52,13 +51,12 @@ object analyzer {
   def logsFormatTime(inputLogs : DataFrame) : DataFrame = {
 
     val formatDate = udf((date: String) => date.substring(1, date.length - 1))
-    val getHour = udf((time: String) => time.substring(12, time.length() - 1))
+    val getTime = udf((time: String) => time.substring(12, time.length() - 1))
     var logs = inputLogs.withColumn("time", formatDate(inputLogs("time")))
     logs = logs
       .withColumn("date", split(col("time"), ":").getItem(0))
-      .withColumn("hour", getHour(logs("time")))
-      .withColumn("time zone", split(col("hour")," ").getItem(1))
-      .drop("time")
+      .withColumn("time", getTime(logs("time")))
+      .withColumn("time zone", split(col("time")," ").getItem(1))
     logs
   }
 
@@ -93,4 +91,9 @@ object analyzer {
       else "Unknown Status")
     inputLogs.withColumn("type request status",typeRequest(col("request status")))
     }
+
+  def countTimeAttendance(inputLogs : DataFrame) : DataFrame = {
+    var logs = inputLogs.withColumn("hour",split(col("time"), ":").getItem(0))
+    logs.groupBy("hour").count().orderBy(desc("count"))
+  }
 }
